@@ -1,48 +1,107 @@
-import numpy as np
-import sounddevice as sd
-import librosa
-import librosa.display
-from dtw import dtw
-from scipy.spatial.distance import euclidean
+import os
+import json
+import logging
+import subprocess
+from flask import Flask, render_template, request, redirect, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from waitress import serve
 
-# Function to record audio from the user
-def record_audio(duration, sample_rate=16000):
-    print(f"Recording for {duration} seconds...")
-    audio = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float64')
-    sd.wait()
-    print("Recording finished.")
-    return audio.flatten(), sample_rate
+# Flask App
+app = Flask(__name__)
 
-# Function to extract MFCC features from audio
-def extract_mfcc(audio, sample_rate=16000, num_cepstral=13):
-    mfcc_features = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=num_cepstral)
-    return mfcc_features.T
+# Configure Logging
+LOG_FILE = "scheduler.log"
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-# Enrollment: Record and store multiple words from the user
-enrolled_features = []
-num_enrollment_words = 3
-for i in range(num_enrollment_words):
-    print(f"Please say word {i+1}:")
-    audio, sr = record_audio(3)
-    mfcc_features = extract_mfcc(audio, sr)
-    enrolled_features.append(mfcc_features)
+# Scheduler
+scheduler = BackgroundScheduler()
 
-# Authentication: Record a word and authenticate
-print("Please say the authentication word:")
-auth_audio, sr = record_audio(3)
-auth_mfcc_features = extract_mfcc(auth_audio, sr)
+# Config Path
+CONFIG_PATH = "config.json"
 
-# Calculate DTW distance and determine if it matches any enrolled words
-threshold = 200  # You may need to adjust this threshold based on testing
-min_distance = float('inf')
-for i, mfcc_features in enumerate(enrolled_features):
-    distance, _ = dtw(auth_mfcc_features, mfcc_features, dist=euclidean)
-    if distance < min_distance:
-        min_distance = distance
+def load_config():
+    """Reads the schedule configuration from config.json"""
+    if not os.path.exists(CONFIG_PATH):
+        logging.error("Config file not found!")
+        return []
+    with open(CONFIG_PATH, "r") as file:
+        return json.load(file)
 
-# Display the result
-print(f"DTW Distance: {min_distance}")
-if min_distance < threshold:
-    print("Voice authentication successful!")
-else:
-    print("Voice not recognized. Authentication failed.")
+def save_config(tasks):
+    """Save tasks to config.json"""
+    with open(CONFIG_PATH, "w") as file:
+        json.dump(tasks, file, indent=4)
+
+def execute_task(task):
+    """Executes a shell command and logs output"""
+    command = task["command"]
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        logging.info(f"Executed {task['name']}: {result.stdout.strip()}")
+    except Exception as e:
+        logging.error(f"Failed to execute {task['name']}: {e}")
+
+def schedule_tasks():
+    """Schedule all tasks from config.json"""
+    scheduler.remove_all_jobs()
+    tasks = load_config()
+    for task in tasks:
+        trigger = CronTrigger.from_crontab(task["cron"])
+        scheduler.add_job(execute_task, trigger, args=[task])
+
+# Start Scheduler
+scheduler.start()
+schedule_tasks()
+
+# Health Check Endpoint
+@app.route("/crystal-onyxscheduler-service/heartneat", methods=['GET'])
+def heartbeat():
+    return jsonify({"status": "healthy"})
+
+# Web UI Routes
+@app.route("/")
+def index():
+    tasks = load_config()
+    return render_template("index.html", tasks=tasks)
+
+@app.route("/add", methods=["POST"])
+def add_task():
+    """Add a new task"""
+    data = request.form
+    new_task = {
+        "name": data["name"],
+        "command": data["command"],
+        "cron": data["cron"]
+    }
+    tasks = load_config()
+    tasks.append(new_task)
+    save_config(tasks)
+    schedule_tasks()
+    return redirect("/")
+
+@app.route("/delete/<name>")
+def delete_task(name):
+    """Delete a task"""
+    tasks = load_config()
+    tasks = [task for task in tasks if task["name"] != name]
+    save_config(tasks)
+    schedule_tasks()
+    return redirect("/")
+
+@app.route("/logs")
+def logs():
+    """View Logs"""
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r") as file:
+            logs = file.readlines()
+    else:
+        logs = ["No logs found."]
+    return render_template("logs.html", logs=logs)
+
+if __name__ == "__main__":
+    serve(app, host="0.0.0.0", port=8039, url_scheme='https', threads=8)
