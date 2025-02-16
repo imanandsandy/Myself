@@ -104,3 +104,27 @@
 
 </body>
 </html>
+
+
+
+def write_completed_task(task, status):
+    """Write completed job details to job_completed.json"""
+    if not os.path.exists(JOB_COMPLETED_PATH):
+        completed_jobs = []
+    else:
+        with open(JOB_COMPLETED_PATH, "r") as file:
+            try:
+                completed_jobs = json.load(file)
+            except json.JSONDecodeError:
+                completed_jobs = []
+
+    completed_jobs.append({
+        "name": task["name"],
+        "command": task["command"],
+        "cron": task["cron"],
+        "status": status
+    })
+
+    with open(JOB_COMPLETED_PATH, "w") as file:
+        json.dump(completed_jobs, file, indent=4)
+
