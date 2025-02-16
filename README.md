@@ -107,24 +107,73 @@
 
 
 
-def write_completed_task(task, status):
-    """Write completed job details to job_completed.json"""
-    if not os.path.exists(JOB_COMPLETED_PATH):
-        completed_jobs = []
-    else:
+def execute_task(task):
+    """Executes a shell command and logs output"""
+    command = task["command"]
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        if result.returncode == 0:
+            logging.info(f"Executed {task['name']}: {result.stdout.strip()}")
+            write_completed_task(task, "Success")
+        else:
+            logging.error(f"Failed {task['name']}: {result.stderr.strip()}")
+            write_completed_task(task, "Failed")
+    except Exception as e:
+        logging.error(f"Error executing {task['name']}: {e}")
+        write_completed_task(task, "Error")
+
+def schedule_tasks():
+    """Schedule all tasks from config.json"""
+    scheduler.remove_all_jobs()
+    tasks = load_config()
+    for task in tasks:
+        trigger = CronTrigger.from_crontab(task["cron"])
+        scheduler.add_job(execute_task, trigger, args=[task])
+
+# Start Scheduler
+scheduler.start()
+schedule_tasks()
+
+# Health Check Endpoint
+@app.route("/crystal-onyxscheduler-service/heartbeat", methods=['GET']) 
+def heartbeat():
+    return jsonify({"status": "healthy"})
+
+# Web UI Routes
+@app.route("/crystal-onyxscheduler-service/home") 
+def index():
+    tasks = load_config()
+    completed_jobs = []
+    
+    if os.path.exists(JOB_COMPLETED_PATH):
         with open(JOB_COMPLETED_PATH, "r") as file:
             try:
                 completed_jobs = json.load(file)
             except json.JSONDecodeError:
                 completed_jobs = []
 
-    completed_jobs.append({
-        "name": task["name"],
-        "command": task["command"],
-        "cron": task["cron"],
-        "status": status
-    })
+    return render_template("index.html", tasks=tasks, completed_jobs=completed_jobs)
 
-    with open(JOB_COMPLETED_PATH, "w") as file:
-        json.dump(completed_jobs, file, indent=4)
+@app.route("/crystal-onyxscheduler-service/add", methods=["POST"]) 
+def add_task():
+    """Add a new task"""
+    data = request.form
+    new_task = {
+        "name": data["name"],
+        "command": data["command"],
+        "cron": data["cron"]
+    }
+    tasks = load_config()
+    tasks.append(new_task)
+    save_config(tasks)
+    schedule_tasks()
+    return redirect("/crystal-onyxscheduler-service/home") 
 
+@app.route("/crystal-onyxscheduler-service/delete/<name>")
+def delete_task(name):
+    """Delete a task"""
+    tasks = load_config()
+    tasks = [task for task in tasks if task["name"] != name]
+    save_config(tasks)
+    schedule_tasks()
+    return redirect("/crystal-onyxscheduler-service/home") 
