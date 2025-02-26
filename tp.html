@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Scheduler</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Task Scheduler</h1>
+
+        <form method="GET" action="{{ url_for('index') }}">
+            <label>Select Config File:</label>
+            <select name="config" onchange="this.form.submit()">
+                {% for config in config_files %}
+                <option value="{{ config }}" {% if config == selected_config %}selected{% endif %}>{{ config }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <form method="POST" action="{{ url_for('add_task') }}">
+            <input type="hidden" name="config_file" value="{{ selected_config }}">
+            <div>
+                <input type="text" name="name" placeholder="Task Name" required>
+                <input type="text" name="command" placeholder="Command" required>
+                <input type="text" name="cron" placeholder="Cron Expression" required>
+                <button type="submit">Add Task</button>
+            </div>
+        </form>
+
+        <h3>Scheduled Tasks ({{ selected_config }})</h3>
+        <ul>
+            {% for task in tasks %}
+            <li>{{ task.name }} - {{ task.command }} - {{ task.cron }} 
+                <a href="{{ url_for('delete_task', name=task.name, config=selected_config) }}">Delete</a>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <h3>Completed Jobs</h3>
+        <ul>
+            {% for job in completed_jobs %}
+            <li>{{ job.name }} - {{ job.status }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>
