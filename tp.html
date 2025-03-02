@@ -12,27 +12,43 @@
         table { margin-top: 20px; }
         .btn-danger, .btn-info { margin-right: 10px; }
     </style>
+    <script>
+        function loadConfigTasks() {
+            var selectedConfig = document.getElementById("configSelector").value;
+            if (!selectedConfig) return;
+
+            fetch("{{ base_url }}/view/" + selectedConfig)
+                .then(response => response.json())
+                .then(tasks => {
+                    let tableBody = document.getElementById("tasksTableBody");
+                    tableBody.innerHTML = "";
+
+                    tasks.forEach(task => {
+                        tableBody.innerHTML += `
+                            <tr>
+                                <td>${task.name}</td>
+                                <td>${task.command}</td>
+                                <td>${task.cron}</td>
+                                <td>
+                                    <a href="{{ base_url }}/delete/${selectedConfig}/${task.name}" class="btn btn-danger">Delete</a>
+                                </td>
+                            </tr>`;
+                    });
+                });
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <h1>Task Scheduler</h1>
-        
-        <form method="POST" action="{{ base_url }}/add">
-            <div class="row">
-                <div class="col">
-                    <input type="text" class="form-control" name="name" placeholder="Task Name" required>
-                </div>
-                <div class="col">
-                    <input type="text" class="form-control" name="command" placeholder="Command" required>
-                </div>
-                <div class="col">
-                    <input type="text" class="form-control" name="cron" placeholder="Cron Expression" required>
-                </div>
-                <div class="col">
-                    <button type="submit" class="btn btn-primary">Add Task</button>
-                </div>
-            </div>
-        </form>
+
+        <label for="configSelector">Select Config File:</label>
+        <select id="configSelector" class="form-control" onchange="loadConfigTasks()">
+            <option value="">-- Select a Config File --</option>
+            {% for config in configs.keys() %}
+                <option value="{{ config }}">{{ config }}</option>
+            {% endfor %}
+        </select>
 
         <h3>Scheduled Tasks</h3>
         <table class="table table-striped">
@@ -44,17 +60,8 @@
                     <th>Action</th>
                 </tr>
             </thead>
-            <tbody>
-                {% for task in tasks %}
-                <tr>
-                    <td>{{ task.name }}</td>
-                    <td>{{ task.command }}</td>
-                    <td>{{ task.cron }}</td>
-                    <td>
-                        <a href="{{ base_url }}/delete/{{ task.name }}" class="btn btn-danger">Delete</a>
-                    </td>
-                </tr>
-                {% endfor %}
+            <tbody id="tasksTableBody">
+                <!-- Tasks will be dynamically loaded here -->
             </tbody>
         </table>
 
