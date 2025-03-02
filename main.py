@@ -1,61 +1,73 @@
-import os
 import json
 import logging
 import subprocess
+import os
 from flask import Flask, render_template, request, redirect, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from waitress import serve
-from globals import CONFIG_DIR, JOB_COMPLETED_PATH, url  # Import global paths
+from globals import dep_path, get_url
 
-# Flask App
 app = Flask(__name__)
+
+# Configure Logging
+logging.basicConfig(level=logging.INFO)
 
 # Scheduler
 scheduler = BackgroundScheduler()
 
-# Logging
-logging.basicConfig(level=logging.INFO)
+# Directory for config files
+CONFIG_DIR = os.path.join(dep_path, "configs")
+JOB_COMPLETED_PATH = os.path.join(dep_path, "job_completed.json")
 
-def get_config_files():
-    """Returns a list of available config files in CONFIG_DIR"""
+def load_configs():
+    """Reads all schedule configurations from CONFIG_DIR"""
+    configs = []
     if not os.path.exists(CONFIG_DIR):
         os.makedirs(CONFIG_DIR)
-    return [f for f in os.listdir(CONFIG_DIR) if f.startswith("config_") and f.endswith(".json")]
+    
+    for file in os.listdir(CONFIG_DIR):
+        if file.endswith(".json"):
+            config_path = os.path.join(CONFIG_DIR, file)
+            try:
+                with open(config_path, "r") as f:
+                    configs.extend(json.load(f))
+            except Exception as e:
+                logging.error(f"Error reading {file}: {e}")
+    return configs
 
-def load_config(config_file):
-    """Reads a single config file"""
-    config_path = os.path.join(CONFIG_DIR, config_file)
-    if not os.path.exists(config_path):
-        logging.error(f"Config file {config_file} not found!")
-        return []
-    with open(config_path, "r") as file:
-        try:
-            return json.load(file)
-        except json.JSONDecodeError:
-            logging.error(f"Config file {config_file} is corrupted.")
-            return []
+def save_config(filename, tasks):
+    """Save tasks to a specific config file"""
+    config_path = os.path.join(CONFIG_DIR, filename)
+    try:
+        with open(config_path, "w") as file:
+            json.dump(tasks, file, indent=4)
+    except Exception as e:
+        logging.error(f"Error saving {filename}: {e}")
 
 def write_completed_task(task, status):
     """Write completed job details to job_completed.json"""
-    if not os.path.exists(JOB_COMPLETED_PATH):
-        completed_jobs = []
-    else:
-        with open(JOB_COMPLETED_PATH, "r") as file:
-            try:
+    completed_jobs = []
+    if os.path.exists(JOB_COMPLETED_PATH):
+        try:
+            with open(JOB_COMPLETED_PATH, "r") as file:
                 completed_jobs = json.load(file)
-            except json.JSONDecodeError:
-                completed_jobs = []
-
+        except json.JSONDecodeError:
+            completed_jobs = []
+        except Exception as e:
+            logging.error(f"Error reading completed jobs file: {e}")
+    
     completed_jobs.append({
         "name": task["name"],
         "command": task["command"],
         "cron": task["cron"],
         "status": status
     })
-
-    with open(JOB_COMPLETED_PATH, "w") as file:
-        json.dump(completed_jobs, file, indent=4)
+    try:
+        with open(JOB_COMPLETED_PATH, "w") as file:
+            json.dump(completed_jobs, file, indent=4)
+    except Exception as e:
+        logging.error(f"Error writing completed jobs file: {e}")
 
 def execute_task(task):
     """Executes a shell command and logs output"""
@@ -73,68 +85,72 @@ def execute_task(task):
         write_completed_task(task, "Error")
 
 def schedule_tasks():
-    """Schedule all tasks from all config files"""
+    """Schedule all tasks from config files"""
     scheduler.remove_all_jobs()
-    config_files = get_config_files()
+    tasks = load_configs()
+    for task in tasks:
+        trigger = CronTrigger.from_crontab(task["cron"])
+        scheduler.add_job(execute_task, trigger, args=[task])
+    scheduler.start()
 
-    for config_file in config_files:
-        tasks = load_config(config_file)
-        for task in tasks:
-            trigger = CronTrigger.from_crontab(task["cron"])
-            scheduler.add_job(execute_task, trigger, args=[task])
-
-# Start Scheduler
-scheduler.start()
 schedule_tasks()
 
-# Web UI Routes
-@app.route(f"{url}/home")
+@app.route("/crystal-onyxscheduler-srv/heartbeat", methods=['GET'])
+def heartbeat():
+    return jsonify({"status": "healthy"})
+
+@app.route("/crystal-onyxscheduler-srv/home")
 def index():
-    config_files = get_config_files()
-    selected_config = request.args.get("config", config_files[0] if config_files else None)
-    tasks = load_config(selected_config) if selected_config else []
-    
+    tasks = load_configs()
     completed_jobs = []
     if os.path.exists(JOB_COMPLETED_PATH):
-        with open(JOB_COMPLETED_PATH, "r") as file:
-            try:
+        try:
+            with open(JOB_COMPLETED_PATH, "r") as file:
                 completed_jobs = json.load(file)
-            except json.JSONDecodeError:
-                completed_jobs = []
+        except json.JSONDecodeError:
+            completed_jobs = []
+        except Exception as e:
+            logging.error(f"Error reading completed jobs file: {e}")
+    return render_template("index.html", tasks=tasks, completed_jobs=completed_jobs, base_url=get_url())
 
-    return render_template("index.html", config_files=config_files, selected_config=selected_config, tasks=tasks, completed_jobs=completed_jobs)
-
-@app.route(f"{url}/add", methods=["POST"])
+@app.route("/crystal-onyxscheduler-srv/add", methods=["POST"])
 def add_task():
-    """Add a new task to a selected config file"""
+    """Add a new task"""
     data = request.form
-    selected_config = data.get("config_file")
     new_task = {
         "name": data["name"],
         "command": data["command"],
         "cron": data["cron"]
     }
-    
-    tasks = load_config(selected_config)
+    filename = data.get("config_file", "config_1.json")
+    config_path = os.path.join(CONFIG_DIR, filename)
+    tasks = []
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as file:
+                tasks = json.load(file)
+        except json.JSONDecodeError:
+            tasks = []
     tasks.append(new_task)
-    
-    with open(os.path.join(CONFIG_DIR, selected_config), "w") as file:
-        json.dump(tasks, file, indent=4)
-
+    save_config(filename, tasks)
     schedule_tasks()
-    return redirect(f"{url}/home?config={selected_config}")
+    return redirect(get_url() + "/home")
 
-@app.route(f"{url}/delete/<name>/<config>")
-def delete_task(name, config):
-    """Delete a task from a selected config file"""
-    tasks = load_config(config)
-    tasks = [task for task in tasks if task["name"] != name]
-    
-    with open(os.path.join(CONFIG_DIR, config), "w") as file:
-        json.dump(tasks, file, indent=4)
-
+@app.route("/crystal-onyxscheduler-srv/delete/<name>")
+def delete_task(name):
+    """Delete a task"""
+    for file in os.listdir(CONFIG_DIR):
+        if file.endswith(".json"):
+            config_path = os.path.join(CONFIG_DIR, file)
+            try:
+                with open(config_path, "r") as f:
+                    tasks = json.load(f)
+                tasks = [task for task in tasks if task["name"] != name]
+                save_config(file, tasks)
+            except Exception as e:
+                logging.error(f"Error modifying {file}: {e}")
     schedule_tasks()
-    return redirect(f"{url}/home?config={config}")
+    return redirect(get_url() + "/home")
 
 if __name__ == "__main__":
     serve(app, host="0.0.0.0", port=8039, url_scheme='https', threads=8)
