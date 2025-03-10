@@ -1,54 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Scheduler</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
-<body class="bg-light">
-
-<div class="container mt-5">
-    <h2 class="text-center">Task Scheduler</h2>
-
-    <form class="mb-4">
-        <label for="configSelect">Select Config File:</label>
-        <select id="configSelect" class="form-control" onchange="changeConfig()">
-            {% for config in config_files %}
-                <option value="{{ config }}" {% if config == selected_config %}selected{% endif %}>{{ config }}</option>
+<body>
+    <h1>Task Scheduler</h1>
+    
+    <form action="/crystal-onyxscheduler-srv/home" method="get">
+        <label for="config">Select Config File:</label>
+        <select name="config" id="config" onchange="this.form.submit()">
+            {% for file in config_files %}
+                <option value="{{ file }}" {% if file == selected_config %}selected{% endif %}>{{ file }}</option>
             {% endfor %}
         </select>
     </form>
-
-    <form method="POST" action="/crystal-onyxscheduler-srv/add">
+    
+    <h2>Scheduled Tasks</h2>
+    <ul>
+        {% for task in tasks %}
+            <li>
+                <strong>{{ task.name }}</strong> - {{ task.command }} (Cron: {{ task.cron }})
+                <a href="/crystal-onyxscheduler-srv/delete/{{ task.name }}?config={{ selected_config }}">Delete</a>
+            </li>
+        {% endfor %}
+    </ul>
+    
+    <h2>Completed Jobs</h2>
+    <ul>
+        {% for job in completed_jobs %}
+            <li><strong>{{ job.name }}</strong> - {{ job.status }}</li>
+        {% endfor %}
+    </ul>
+    
+    <h2>Add New Task</h2>
+    <form action="/crystal-onyxscheduler-srv/add" method="post">
         <input type="hidden" name="config_file" value="{{ selected_config }}">
-        <div class="form-row">
-            <div class="col"><input type="text" class="form-control" name="name" placeholder="Task Name" required></div>
-            <div class="col"><input type="text" class="form-control" name="command" placeholder="Command" required></div>
-            <div class="col"><input type="text" class="form-control" name="cron" placeholder="Cron Expression" required></div>
-            <div class="col"><button type="submit" class="btn btn-primary">Add Task</button></div>
-        </div>
+        <label>Name: <input type="text" name="name" required></label><br>
+        <label>Command: <input type="text" name="command" required></label><br>
+        <label>Cron Expression: <input type="text" name="cron" required></label><br>
+        <button type="submit">Add Task</button>
     </form>
-
-    <h3 class="mt-4">Scheduled Tasks</h3>
-    <table class="table table-bordered">
-        <thead><tr><th>Name</th><th>Command</th><th>Cron</th><th>Action</th></tr></thead>
-        <tbody>
-            {% for task in tasks %}
-            <tr>
-                <td>{{ task.name }}</td><td>{{ task.command }}</td><td>{{ task.cron }}</td>
-                <td><a href="/crystal-onyxscheduler-srv/delete/{{ selected_config }}/{{ task.name }}" class="btn btn-danger">Delete</a></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<script>
-function changeConfig() {
-    window.location.href = "/crystal-onyxscheduler-srv/home?config=" + document.getElementById("configSelect").value;
-}
-</script>
-
 </body>
 </html>
