@@ -1,44 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Scheduler</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .btn-primary {
+            width: 100%;
+        }
+
+        .btn-danger, .btn-warning {
+            margin-right: 10px;
+        }
+
+        table {
+            margin-top: 20px;
+        }
+
+        .text-success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .text-danger {
+            color: red;
+            font-weight: bold;
+        }
+
+        .text-warning {
+            color: orange;
+            font-weight: bold;
+        }
+
+        .table th {
+            background-color: #007bff;
+            color: white;
+            text-align: center;
+        }
+
+        .table td {
+            text-align: center;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Task Scheduler</h1>
-    
-    <form action="/crystal-onyxscheduler-srv/home" method="get">
-        <label for="config">Select Config File:</label>
-        <select name="config" id="config" onchange="this.form.submit()">
-            {% for file in config_files %}
-                <option value="{{ file }}" {% if file == selected_config %}selected{% endif %}>{{ file }}</option>
-            {% endfor %}
-        </select>
-    </form>
-    
-    <h2>Scheduled Tasks</h2>
-    <ul>
-        {% for task in tasks %}
-            <li>
-                <strong>{{ task.name }}</strong> - {{ task.command }} (Cron: {{ task.cron }})
-                <a href="/crystal-onyxscheduler-srv/delete/{{ task.name }}?config={{ selected_config }}">Delete</a>
-            </li>
-        {% endfor %}
-    </ul>
-    
-    <h2>Completed Jobs</h2>
-    <ul>
-        {% for job in completed_jobs %}
-            <li><strong>{{ job.name }}</strong> - {{ job.status }}</li>
-        {% endfor %}
-    </ul>
-    
-    <h2>Add New Task</h2>
-    <form action="/crystal-onyxscheduler-srv/add" method="post">
-        <input type="hidden" name="config_file" value="{{ selected_config }}">
-        <label>Name: <input type="text" name="name" required></label><br>
-        <label>Command: <input type="text" name="command" required></label><br>
-        <label>Cron Expression: <input type="text" name="cron" required></label><br>
-        <button type="submit">Add Task</button>
-    </form>
+
+    <div class="container">
+        <h1>Task Scheduler</h1>
+
+        <form method="POST" action="{{ base_url }}/add">
+            <div class="row">
+                <div class="col-md-3">
+                    <input type="text" class="form-control" name="name" placeholder="Task Name" required>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" class="form-control" name="command" placeholder="Command" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control" name="cron" placeholder="Cron Expression" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary">Add Task</button>
+                </div>
+            </div>
+        </form>
+
+        <h3 class="mt-4">Scheduled Tasks</h3>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Command</th>
+                    <th>Cron Expression</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td>{{ task.name }}</td>
+                    <td>{{ task.command }}</td>
+                    <td>{{ task.cron }}</td>
+                    <td>
+                        <a href="{{ base_url }}/delete/{{ task.name }}" class="btn btn-danger btn-sm">Delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h3 class="mt-4">Completed Jobs</h3>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Command</th>
+                    <th>Cron Expression</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in completed_jobs %}
+                <tr>
+                    <td>{{ job.name }}</td>
+                    <td>{{ job.command }}</td>
+                    <td>{{ job.cron }}</td>
+                    <td class="{% if job.status == 'Success' %}text-success{% elif job.status == 'Failed' %}text-danger{% else %}text-warning{% endif %}">
+                        {{ job.status }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    </div>
+
 </body>
+
 </html>
