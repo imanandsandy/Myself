@@ -57,6 +57,11 @@
         .table td {
             text-align: center;
         }
+
+        .dropdown {
+            text-align: center;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 
@@ -65,7 +70,18 @@
     <div class="container">
         <h1>Task Scheduler</h1>
 
+        <!-- Config File Dropdown -->
+        <div class="dropdown">
+            <label for="config-select">Select Config File:</label>
+            <select id="config-select" class="form-control" onchange="changeConfig()">
+                {% for config in config_files %}
+                <option value="{{ config }}" {% if config == selected_config %}selected{% endif %}>{{ config }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
         <form method="POST" action="{{ base_url }}/add">
+            <input type="hidden" name="config_file" value="{{ selected_config }}">
             <div class="row">
                 <div class="col-md-3">
                     <input type="text" class="form-control" name="name" placeholder="Task Name" required>
@@ -82,7 +98,7 @@
             </div>
         </form>
 
-        <h3 class="mt-4">Scheduled Tasks</h3>
+        <h3 class="mt-4">Scheduled Tasks ({{ selected_config }})</h3>
         <table class="table table-striped">
             <thead>
                 <tr>
@@ -99,20 +115,21 @@
                     <td>{{ task.command }}</td>
                     <td>{{ task.cron }}</td>
                     <td>
-                        <a href="{{ base_url }}/delete/{{ task.name }}" class="btn btn-danger btn-sm">Delete</a>
+                        <a href="{{ base_url }}/delete/{{ task.name }}?config={{ selected_config }}" class="btn btn-danger btn-sm">Delete</a>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
 
-        <h3 class="mt-4">Completed Jobs</h3>
+        <h3 class="mt-4">Completed Jobs (All Configs)</h3>
         <table class="table table-bordered">
             <thead>
                 <tr>
                     <th>Name</th>
                     <th>Command</th>
                     <th>Cron Expression</th>
+                    <th>Config File</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -122,6 +139,7 @@
                     <td>{{ job.name }}</td>
                     <td>{{ job.command }}</td>
                     <td>{{ job.cron }}</td>
+                    <td>{{ job.config_file }}</td>
                     <td class="{% if job.status == 'Success' %}text-success{% elif job.status == 'Failed' %}text-danger{% else %}text-warning{% endif %}">
                         {{ job.status }}
                     </td>
@@ -131,6 +149,13 @@
         </table>
 
     </div>
+
+    <script>
+        function changeConfig() {
+            let selectedConfig = document.getElementById("config-select").value;
+            window.location.href = "{{ base_url }}/home?config=" + selectedConfig;
+        }
+    </script>
 
 </body>
 
